@@ -1,17 +1,20 @@
-# main.py
 import base64
 import html
+from urllib.parse import quote
+
 import streamlit as st
 import streamlit.components.v1 as components
-from urllib.parse import quote
 from PIL import Image
-from io import BytesIO
 
 st.set_page_config(
     page_title="Auto3D Lab",
     page_icon="🚘",
     layout="wide",
 )
+
+TRIPOSR_URL = "https://huggingface.co/spaces/stabilityai/TripoSR"
+MAX_IMAGE_SIZE = 20 * 1024 * 1024
+MAX_MODEL_SIZE = 80 * 1024 * 1024
 
 st.markdown("""
 <style>
@@ -20,85 +23,146 @@ st.markdown("""
     padding-top: 2rem;
 }
 .hero {
-    padding: 25px;
-    border-radius: 18px;
-    background: linear-gradient(120deg, #101827, #253b58);
+    background: linear-gradient(120deg, #101827, #294967);
     color: white;
-    margin-bottom: 22px;
+    padding: 26px;
+    border-radius: 18px;
+    margin-bottom: 24px;
 }
 .hero h1 { margin: 0; font-size: 2.2rem; }
-.hero p { color: #d5dfed; margin-bottom: 0; }
+.hero p { color: #dce7f3; margin-bottom: 0; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown("""
 <div class="hero">
     <h1>🚘 Auto3D Lab</h1>
-    <p>자동차 사진과 차종 정보를 바탕으로 자료를 탐색하고,
-    3D 모델을 관찰하는 공간</p>
+    <p>자동차 사진에서 3D 모델을 만들고 360도로 관찰하세요.</p>
 </div>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("자동차 정보")
-    make = st.text_input("제조사", placeholder="예: Hyundai")
-    model = st.text_input("차종", placeholder="예: IONIQ 5")
-    year = st.text_input("연식 (선택)", placeholder="예: 2025")
-    color = st.color_picker("뷰어 배경색", "#e9edf2")
-    auto_rotate = st.checkbox("자동 회전", value=True)
-    st.caption("실제 차량과 모델의 일치 여부는 별도로 확인해야 합니다.")
+    manufacturer = st.text_input(
+        "제조사", placeholder="예: Hyundai"
+    )
+    model_name = st.text_input(
+        "차종", placeholder="예: IONIQ 5"
+    )
+    year = st.text_input(
+        "연식 (선택)", placeholder="예: 2025"
+    )
+    background = st.color_picker(
+        "뷰어 배경색", "#e9edf2"
+    )
+    auto_rotate = st.checkbox(
+        "자동 회전", value=True
+    )
 
-st.subheader("1. 참고 사진 업로드")
-photos = st.file_uploader(
-    "자동차 사진을 올려 주세요. 여러 방향의 사진을 권장합니다.",
-    type=["jpg", "jpeg", "png", "webp"],
-    accept_multiple_files=True,
+car_name = " ".join(
+    x.strip()
+    for x in [manufacturer, model_name, year]
+    if x.strip()
 )
 
-if photos:
-    cols = st.columns(min(len(photos), 4))
-    for i, photo in enumerate(photos):
+st.subheader("1. 자동차 사진 업로드")
+
+photo = st.file_uploader(
+    "차량 전체가 선명하게 나온 사진을 선택하세요.",
+    type=["jpg", "jpeg", "png", "webp"],
+    key="car_photo",
+)
+
+if photo:
+    image_bytes = photo.getvalue()
+
+    if len(image_bytes) > MAX_IMAGE_SIZE:
+        st.error("사진은 20MB 이하로 업로드해 주세요.")
+    else:
         try:
-            image = Image.open(BytesIO(photo.getvalue()))
-            with cols[i % len(cols)]:
-                st.image(image, caption=photo.name, use_container_width=True)
+            image = Image.open(photo)
+            st.image(
+                image,
+                caption="3D 변환에 사용할 참고 사진",
+                width=600,
+            )
         except Exception:
-            st.warning(f"{photo.name}: 이미지를 읽을 수 없습니다.")
+            st.error("이미지를 읽을 수 없습니다.")
 
-car_name = " ".join(x for x in [make, model, year] if x).strip()
+st.subheader("2. TripoSR로 3D 모델 생성")
 
-st.subheader("2. 차종 자료 탐색")
-if car_name:
-    q = quote(car_name + " 3D model GLB")
-    st.markdown(
-        f"- [3D 모델 검색하기](https://www.google.com/search?q={q})\n"
-        f"- [Sketchfab에서 검색하기](https://sketchfab.com/search?type=models&q={quote(car_name)})\n"
-        f"- [일반 이미지 검색하기](https://www.google.com/search?tbm=isch&q={quote(car_name + ' car front side rear')})"
+st.info(
+    "무료 오픈소스 모델의 공개 데모를 이용합니다. "
+    "생성은 외부 서비스에서 처리되므로 데모 상태와 "
+    "대기열에 따라 이용이 제한될 수 있습니다."
+)
+
+st.link_button(
+    "TripoSR 공식 3D 생성기 열기 ↗",
+    TRIPOSR_URL,
+    type="primary",
+    use_container_width=True,
+)
+
+with st.expander("앱 안에서 생성기 열기"):
+    st.caption(
+        "공개 데모가 iframe 표시를 허용하지 않거나 "
+        "오류 상태라면 위의 외부 링크를 이용하세요."
     )
-else:
-    st.info("왼쪽에서 제조사와 차종을 입력하면 검색 링크가 표시됩니다.")
+    components.iframe(
+        TRIPOSR_URL,
+        height=700,
+        scrolling=True,
+    )
+
+st.markdown("""
+**생성 순서**
+1. 위 생성기에서 자동차 사진을 업로드합니다.
+2. 배경 제거 옵션 등을 확인하고 Generate를 실행합니다.
+3. 결과를 GLB 형식으로 다운로드합니다.
+4. 아래 업로드란에서 GLB 파일을 불러옵니다.
+""")
+
+if car_name:
+    st.markdown(
+        f"**입력한 차종:** {html.escape(car_name)}"
+    )
+    q = quote(car_name + " official specifications")
+    st.markdown(
+        f"[차종 제원 검색](https://www.google.com/search?q={q})"
+    )
 
 st.divider()
-st.subheader("3. 3D 모델 불러오기")
+st.subheader("3. 생성한 3D 모델 불러오기")
 
 model_file = st.file_uploader(
-    "3D 모델 파일 (.glb)",
+    "TripoSR에서 다운로드한 GLB 파일을 선택하세요.",
     type=["glb"],
-    key="glb_upload",
-    help="다운로드하거나 별도 생성한 GLB 모델을 업로드하세요.",
+    key="model_file",
 )
 
 if model_file:
-    data = model_file.getvalue()
+    model_bytes = model_file.getvalue()
 
-    if len(data) > 80 * 1024 * 1024:
-        st.error("파일이 너무 큽니다. 80MB 이하의 GLB 파일을 사용해 주세요.")
+    if len(model_bytes) > MAX_MODEL_SIZE:
+        st.error("모델 파일은 80MB 이하로 업로드해 주세요.")
+    elif len(model_bytes) < 4 or model_bytes[:4] != b"glTF":
+        st.error("올바른 GLB 바이너리 파일이 아닙니다.")
     else:
-        encoded = base64.b64encode(data).decode("ascii")
-        bg = html.escape(color, quote=True)
-        rotation = "auto-rotate" if auto_rotate else ""
+        st.success("3D 모델을 불러왔습니다.")
 
-        viewer_html = f"""
+        encoded = base64.b64encode(
+            model_bytes
+        ).decode("ascii")
+
+        safe_bg = html.escape(background, quote=True)
+        rotation = "auto-rotate" if auto_rotate else ""
+        safe_name = html.escape(
+            car_name or "자동차 3D 모델",
+            quote=True,
+        )
+
+        viewer = f"""
         <!doctype html>
         <html>
         <head>
@@ -109,64 +173,54 @@ if model_file:
           </script>
           <style>
             html, body {{
-              margin: 0; padding: 0;
-              background: {bg};
-              font-family: sans-serif;
+              margin: 0;
+              padding: 0;
+              background: {safe_bg};
             }}
             model-viewer {{
-              width: 100%; height: 570px;
-              background: {bg};
-              --poster-color: {bg};
+              width: 100%;
+              height: 580px;
+              background: {safe_bg};
+              --poster-color: {safe_bg};
             }}
           </style>
         </head>
         <body>
           <model-viewer
             src="data:model/gltf-binary;base64,{encoded}"
+            alt="{safe_name}"
             camera-controls
             {rotation}
             auto-rotate-delay="1000"
             rotation-per-second="18deg"
-            touch-action="pan-y"
             shadow-intensity="1"
             exposure="1"
             environment-image="neutral"
-            alt="업로드한 자동차 3D 모델">
+            touch-action="pan-y">
           </model-viewer>
         </body>
         </html>
         """
 
-        components.html(viewer_html, height=590, scrolling=False)
-
-        st.success("3D 모델을 불러왔습니다.")
-        st.caption(
-            "마우스로 드래그하면 회전하고, 휠이나 핀치 제스처로 "
-            "확대·축소할 수 있습니다."
+        components.html(
+            viewer,
+            height=600,
+            scrolling=False,
         )
 
         st.download_button(
-            "원본 GLB 파일 저장",
-            data=data,
+            "GLB 모델 다운로드",
+            data=model_bytes,
             file_name="car_model.glb",
             mime="model/gltf-binary",
         )
 
-else:
-    st.info(
-        "아직 3D 모델이 없습니다. 위의 자료 검색에서 모델을 확보하거나 "
-        "3D 생성 서비스로 만든 GLB 파일을 업로드하세요."
-    )
-
-    if photos:
-        st.markdown("**업로드한 사진을 바탕으로 모델을 생성하려면**")
-        st.write(
-            "이미지 기반 3D 생성 API를 연결해야 합니다. "
-            "현재 버전은 사진을 자동으로 3D 메시로 변환하거나 "
-            "차체 형상을 자동 보정하지 않습니다."
+        st.caption(
+            "마우스로 드래그해 회전하고 휠로 확대·축소하세요."
         )
 
 st.divider()
 st.caption(
-    "Auto3D Lab · 참고 자료의 저작권과 모델 라이선스를 확인한 뒤 사용하세요."
+    "Auto3D Lab · TripoSR은 단일 사진 기반 재구성 모델입니다. "
+    "결과는 실제 차량의 정밀 설계도와 다를 수 있습니다."
 )
