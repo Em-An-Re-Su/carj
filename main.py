@@ -170,4 +170,3 @@ st.divider()
 st.caption(
     "Auto3D Lab · 참고 자료의 저작권과 모델 라이선스를 확인한 뒤 사용하세요."
 )
-```
